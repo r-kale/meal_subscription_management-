@@ -132,7 +132,7 @@ select
   c.name as customer_name,
   c.phone,
   coalesce(k.skip_count, 0)::int as skip_count,
-  (s.end_date + coalesce(k.skip_count, 0))::date as effective_end_date,
+  (s.end_date + coalesce(k.skip_count, 0)::int)::date as effective_end_date,
   coalesce(p.paid_total, 0)::numeric(10,2) as paid_total,
   (s.price - coalesce(p.paid_total, 0))::numeric(10,2) as due_amount
 from subscriptions s
