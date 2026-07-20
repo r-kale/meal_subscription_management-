@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
 import type { DataAdapter, Session } from '../data/adapter'
 import type { AppSettings, Location } from '../data/types'
-import { DEFAULT_DUES_TEMPLATE, DEFAULT_RENEWAL_TEMPLATE } from '../lib/whatsapp'
+import { DEFAULT_DUES_TEMPLATE, DEFAULT_RENEWAL_TEMPLATE, DEFAULT_WELCOME_TEMPLATE } from '../lib/whatsapp'
 
 const LOCATION_FILTER_KEY = 'tiffin-location-filter'
 
@@ -36,6 +36,7 @@ export function AppProvider(props: {
   const [settings, setSettings] = useState<AppSettings>({
     renewalTemplate: DEFAULT_RENEWAL_TEMPLATE,
     duesTemplate: DEFAULT_DUES_TEMPLATE,
+    welcomeTemplate: DEFAULT_WELCOME_TEMPLATE,
     upiId: '',
     expiryWindowDays: 5,
   })

@@ -10,9 +10,10 @@ async function openDemo(page: Page) {
   await expect(page.getByTestId('demo-banner')).toBeVisible()
 }
 
-test('unconfigured start screen offers demo mode', async ({ page }) => {
+test('start screen offers demo mode entry', async ({ page }) => {
+  // With config.js filled the app boots to Login; without it, to the
+  // not-configured screen. Both offer a Try Demo button.
   await page.goto('/')
-  await expect(page.getByTestId('not-configured')).toBeVisible()
   await page.getByTestId('try-demo').click()
   await expect(page.getByTestId('demo-banner')).toBeVisible()
 })
@@ -138,4 +139,68 @@ test('location filter narrows dashboard and attendance', async ({ page }) => {
   expect(kothrudLunch).toBeLessThan(allLunch)
   await page.goto('/#/attendance')
   await expect(page.getByRole('button', { name: 'Kothrud Branch' })).toHaveClass(/active/)
+})
+
+test('attendance search filters the tap list', async ({ page }) => {
+  await openDemo(page)
+  await page.goto('/#/attendance')
+  await page.getByTestId('meal-lunch').click()
+  const before = await page.getByTestId('att-row').count()
+  expect(before).toBeGreaterThan(1)
+  await page.getByTestId('att-search').fill('Sonali')
+  await expect(page.getByTestId('att-row')).toHaveCount(1)
+  await expect(page.getByTestId('att-row')).toContainText('Sonali Pawar')
+})
+
+test('edit customer updates name and phone', async ({ page }) => {
+  await openDemo(page)
+  await page.goto('/#/customers')
+  await page.getByTestId('customer-search').fill('Gayatri')
+  await page.getByTestId('customer-row').filter({ hasText: 'Gayatri' }).click()
+  await page.getByTestId('edit-customer').click()
+  await page.getByTestId('edit-name').fill('Gayatri K.')
+  await page.getByTestId('edit-phone').fill('9000012345')
+  await page.getByTestId('save-customer').click()
+  await expect(page.getByTestId('customer-name')).toHaveText('Gayatri K.')
+  await expect(page.locator('.page')).toContainText('9000012345')
+})
+
+test('location can be renamed in settings', async ({ page }) => {
+  await openDemo(page)
+  await page.goto('/#/settings')
+  await page.getByTestId('location-row').filter({ hasText: 'Kothrud Branch' }).click()
+  await page.getByTestId('location-name-input').fill('Kothrud Main')
+  await page.getByTestId('save-location').click()
+  await expect(page.getByTestId('location-row').filter({ hasText: 'Kothrud Main' })).toBeVisible()
+})
+
+test('message modal offers renewal, dues, welcome and custom options', async ({ page }) => {
+  await openDemo(page)
+  await page.goto('/#/customers')
+  await page.getByTestId('customer-search').fill('Pankaj')
+  await page.getByTestId('customer-row').filter({ hasText: 'Pankaj' }).click()
+  await page.getByTestId('open-messages').click()
+  await expect(page.getByText('Renewal reminder')).toBeVisible()
+  await expect(page.getByText('Dues reminder')).toBeVisible()
+  await expect(page.getByText('Welcome / confirmation')).toBeVisible()
+  const links = page.getByTestId('whatsapp-link')
+  await expect(links.first()).toHaveAttribute('href', /wa\.me\/917620781567/)
+  await page.locator('#custom-msg').fill('Custom hello')
+  await expect(page.getByRole('link', { name: 'Send custom message' })).toHaveAttribute(
+    'href',
+    /Custom%20hello/,
+  )
+})
+
+test('reports show today attendance summary and dues outstanding', async ({ page }) => {
+  await openDemo(page)
+  await page.goto('/#/attendance')
+  await page.getByTestId('meal-lunch').click()
+  await page.getByTestId('mark-present').first().click()
+  await page.goto('/#/reports')
+  const att = page.getByTestId('att-summary')
+  await expect(att).toContainText('Lunch')
+  await expect(att).toContainText('1 present')
+  const dues = page.getByTestId('dues-summary')
+  await expect(dues).toContainText('owe')
 })

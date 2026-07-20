@@ -16,6 +16,7 @@ export function Attendance() {
   const [date, setDate] = useState(todayIST())
   const [meal, setMeal] = useState<AttendanceMeal>(defaultMeal)
   const [rows, setRows] = useState<AttendanceRow[]>([])
+  const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(true)
 
   const reload = useCallback(async () => {
@@ -42,6 +43,9 @@ export function Attendance() {
 
   const marked = rows.filter((r) => r.mark !== null).length
   const present = rows.filter((r) => r.mark === 'present').length
+  const visible = rows.filter((r) =>
+    r.subscription.customer_name.toLowerCase().includes(query.trim().toLowerCase()),
+  )
 
   return (
     <div className="page">
@@ -65,14 +69,25 @@ export function Attendance() {
         </div>
       </div>
 
+      <input
+        className="search-input"
+        placeholder="Search name…"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        data-testid="att-search"
+      />
+
       <div className="card">
         <h3 data-testid="att-counter">
           {present} present · {marked}/{rows.length} marked
         </h3>
         {loading && <EmptyState>Loading…</EmptyState>}
         {!loading && rows.length === 0 && <EmptyState>No active subscribers for this day and meal.</EmptyState>}
+        {!loading && rows.length > 0 && visible.length === 0 && (
+          <EmptyState>No names match "{query}".</EmptyState>
+        )}
         {!loading &&
-          rows.map((row) => (
+          visible.map((row) => (
             <div key={row.subscription.id} className={`att-row${row.isSkipDay ? ' skipped' : ''}`} data-testid="att-row">
               <div className="grow">
                 <div className="name">{row.subscription.customer_name}</div>

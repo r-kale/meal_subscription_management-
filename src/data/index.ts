@@ -21,12 +21,11 @@ let adapter: DataAdapter | null = null
  * - Demo (localStorage) otherwise
  */
 export function getAdapter(forceDemo = false): DataAdapter {
-  if (adapter) return adapter
-  if (!forceDemo && isConfigured()) {
-    adapter = new SupabaseAdapter(window.APP_CONFIG!.supabaseUrl!, window.APP_CONFIG!.supabaseAnonKey!)
-  } else {
-    adapter = new DemoAdapter()
-  }
+  const wantDemo = forceDemo || !isConfigured()
+  if (adapter && adapter.isDemo === wantDemo) return adapter
+  adapter = wantDemo
+    ? new DemoAdapter()
+    : new SupabaseAdapter(window.APP_CONFIG!.supabaseUrl!, window.APP_CONFIG!.supabaseAnonKey!)
   return adapter
 }
 

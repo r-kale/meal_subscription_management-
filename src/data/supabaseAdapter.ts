@@ -7,7 +7,7 @@ import {
   servesMeal,
   subscriptionStatus,
 } from '../lib/domain'
-import { DEFAULT_DUES_TEMPLATE, DEFAULT_RENEWAL_TEMPLATE } from '../lib/whatsapp'
+import { DEFAULT_DUES_TEMPLATE, DEFAULT_RENEWAL_TEMPLATE, DEFAULT_WELCOME_TEMPLATE } from '../lib/whatsapp'
 import type { DataAdapter, Session } from './adapter'
 import type {
   AppSettings,
@@ -211,12 +211,22 @@ export class SupabaseAdapter implements DataAdapter {
     const [locations, details] = await Promise.all([this.listLocations(true), this.fetchDetails()])
     const from = `${month}-01`
     const to = `${month}-31`
-    const { data: pays, error } = await this.client
-      .from('payments')
-      .select('amount, paid_on, subscription_id')
-      .gte('paid_on', from)
-      .lte('paid_on', to)
-    SupabaseAdapter.throwOn(error)
+    const [payRes, attRes] = await Promise.all([
+      this.client
+        .from('payments')
+        .select('amount, paid_on, subscription_id')
+        .gte('paid_on', from)
+        .lte('paid_on', to),
+      this.client
+        .from('attendance')
+        .select('subscription_id')
+        .eq('status', 'present')
+        .gte('att_date', from)
+        .lte('att_date', to),
+    ])
+    SupabaseAdapter.throwOn(payRes.error)
+    SupabaseAdapter.throwOn(attRes.error)
+    const pays = payRes.data
     const locBySub = new Map(details.map((d) => [d.id, d.location_id]))
     const today = todayIST()
     const monthEnd = to > today ? today : to
@@ -230,7 +240,8 @@ export class SupabaseAdapter implements DataAdapter {
       const activeAtMonthEnd = details.filter(
         (d) => d.location_id === loc.id && isActiveOn(d, d.effective_end_date, monthEnd),
       ).length
-      return { locationId: loc.id, locationName: loc.name, revenue, newSubscriptions, activeAtMonthEnd }
+      const mealsServed = (attRes.data ?? []).filter((a) => locBySub.get(a.subscription_id) === loc.id).length
+      return { locationId: loc.id, locationName: loc.name, revenue, newSubscriptions, activeAtMonthEnd, mealsServed }
     })
   }
 
@@ -241,6 +252,7 @@ export class SupabaseAdapter implements DataAdapter {
     const settings: AppSettings = {
       renewalTemplate: map.get('renewal_template') || DEFAULT_RENEWAL_TEMPLATE,
       duesTemplate: map.get('dues_template') || DEFAULT_DUES_TEMPLATE,
+      welcomeTemplate: map.get('welcome_template') || DEFAULT_WELCOME_TEMPLATE,
       upiId: map.get('upi_id') || '',
       expiryWindowDays: Number(map.get('expiry_window_days')) || 5,
     }
@@ -377,6 +389,7 @@ export class SupabaseAdapter implements DataAdapter {
     const rows = [
       { key: 'renewal_template', value: settings.renewalTemplate },
       { key: 'dues_template', value: settings.duesTemplate },
+      { key: 'welcome_template', value: settings.welcomeTemplate },
       { key: 'upi_id', value: settings.upiId },
       { key: 'expiry_window_days', value: String(settings.expiryWindowDays) },
     ]
