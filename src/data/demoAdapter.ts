@@ -12,7 +12,7 @@ import {
   servesMeal,
   subscriptionStatus,
 } from '../lib/domain'
-import { DEFAULT_DUES_TEMPLATE, DEFAULT_RENEWAL_TEMPLATE } from '../lib/whatsapp'
+import { DEFAULT_DUES_TEMPLATE, DEFAULT_RENEWAL_TEMPLATE, DEFAULT_WELCOME_TEMPLATE } from '../lib/whatsapp'
 import type { DataAdapter, Session } from './adapter'
 import type {
   AppSettings,
@@ -55,6 +55,7 @@ function defaultSettings(): AppSettings {
   return {
     renewalTemplate: DEFAULT_RENEWAL_TEMPLATE,
     duesTemplate: DEFAULT_DUES_TEMPLATE,
+    welcomeTemplate: DEFAULT_WELCOME_TEMPLATE,
     upiId: 'demo@upi',
     expiryWindowDays: 5,
   }
@@ -151,6 +152,8 @@ export class DemoAdapter implements DataAdapter {
 
   constructor(db?: Db) {
     this.db = db ?? load()
+    // Older persisted demo data may predate newly added settings keys.
+    this.db.settings = { ...defaultSettings(), ...this.db.settings }
     this.persist()
   }
 
@@ -307,7 +310,10 @@ export class DemoAdapter implements DataAdapter {
         const skips = this.db.skipDays.filter((k) => k.subscription_id === s.id).length
         return isActiveOn(s, effectiveEndDate(s.end_date, skips), monthEnd > todayIST() ? todayIST() : monthEnd)
       }).length
-      return { locationId: loc.id, locationName: loc.name, revenue, newSubscriptions, activeAtMonthEnd }
+      const mealsServed = this.db.attendance.filter(
+        (a) => a.status === 'present' && monthOf(a.att_date) === month && subIdsAtLoc.has(a.subscription_id),
+      ).length
+      return { locationId: loc.id, locationName: loc.name, revenue, newSubscriptions, activeAtMonthEnd, mealsServed }
     })
   }
 

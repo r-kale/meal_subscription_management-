@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Modal, Spinner, StatusBadge } from '../components/ui'
-import { WhatsAppButton } from '../components/WhatsAppButton'
-import type { CustomerWithHistory, PaymentMode, SubscriptionDetail } from '../data/types'
+import type { Customer, CustomerWithHistory, PaymentMode, SubscriptionDetail } from '../data/types'
 import { addDays, formatDMY, todayIST } from '../lib/dates'
 import { MEAL_LABEL } from '../lib/domain'
 import { inr } from '../lib/money'
+import { renderTemplate, waLink } from '../lib/whatsapp'
 import { useApp } from '../state/AppContext'
 
 export function CustomerDetail() {
@@ -15,6 +15,8 @@ export function CustomerDetail() {
   const [data, setData] = useState<CustomerWithHistory | null>(null)
   const [payFor, setPayFor] = useState<SubscriptionDetail | null>(null)
   const [skipFor, setSkipFor] = useState<SubscriptionDetail | null>(null)
+  const [messageFor, setMessageFor] = useState<SubscriptionDetail | null>(null)
+  const [editing, setEditing] = useState(false)
   const [error, setError] = useState('')
 
   const reload = useCallback(() => {
@@ -39,7 +41,14 @@ export function CustomerDetail() {
 
   return (
     <div className="page">
-      <h2 data-testid="customer-name">{customer.name}</h2>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <h2 data-testid="customer-name" style={{ flex: 1 }}>
+          {customer.name}
+        </h2>
+        <button className="btn small" onClick={() => setEditing(true)} data-testid="edit-customer">
+          ✏️ Edit
+        </button>
+      </div>
       <div className="muted">
         {customer.phone && (
           <>
@@ -58,6 +67,7 @@ export function CustomerDetail() {
           payments={data.paymentsBySubscription[current.id] ?? []}
           onAddPayment={() => setPayFor(current)}
           onAddSkip={() => setSkipFor(current)}
+          onMessage={() => setMessageFor(current)}
           onRenew={() => navigate(`/subscribe?customer=${customer.id}&renew=${current.id}`)}
           onCancel={() => cancelSub(current.id)}
           onRemoveSkip={async (skipId) => {
@@ -115,7 +125,142 @@ export function CustomerDetail() {
           }}
         />
       )}
+      {messageFor && <MessageModal detail={messageFor} onClose={() => setMessageFor(null)} />}
+      {editing && (
+        <EditCustomerModal
+          customer={customer}
+          onClose={() => setEditing(false)}
+          onSaved={() => {
+            setEditing(false)
+            reload()
+          }}
+        />
+      )}
     </div>
+  )
+}
+
+function EditCustomerModal(props: { customer: Customer; onClose: () => void; onSaved: () => void }) {
+  const { adapter, locations } = useApp()
+  const [name, setName] = useState(props.customer.name)
+  const [phone, setPhone] = useState(props.customer.phone ?? '')
+  const [locationId, setLocationId] = useState(props.customer.location_id)
+  const [notes, setNotes] = useState(props.customer.notes ?? '')
+  const [error, setError] = useState('')
+
+  async function submit(e: FormEvent) {
+    e.preventDefault()
+    if (!name.trim()) {
+      setError('Name is required')
+      return
+    }
+    const digits = phone.replace(/\D/g, '')
+    if (digits && digits.length !== 10) {
+      setError('Phone must be 10 digits (or empty)')
+      return
+    }
+    try {
+      await adapter.updateCustomer(props.customer.id, {
+        name: name.trim(),
+        phone: digits || null,
+        location_id: locationId,
+        notes: notes.trim() || null,
+      })
+      props.onSaved()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save')
+    }
+  }
+
+  return (
+    <Modal title="Edit customer" onClose={props.onClose}>
+      <form onSubmit={submit}>
+        <div className="field">
+          <label htmlFor="edit-name">Name</label>
+          <input id="edit-name" value={name} onChange={(e) => setName(e.target.value)} data-testid="edit-name" />
+        </div>
+        <div className="field">
+          <label htmlFor="edit-phone">Phone (10 digits, optional)</label>
+          <input id="edit-phone" inputMode="numeric" value={phone} onChange={(e) => setPhone(e.target.value)} data-testid="edit-phone" />
+        </div>
+        <div className="field">
+          <label htmlFor="edit-location">Location</label>
+          <select id="edit-location" value={locationId} onChange={(e) => setLocationId(e.target.value)}>
+            {locations.map((l) => (
+              <option key={l.id} value={l.id}>
+                {l.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="field">
+          <label htmlFor="edit-notes">Notes</label>
+          <textarea id="edit-notes" value={notes} onChange={(e) => setNotes(e.target.value)} />
+        </div>
+        {error && <p className="error-text">{error}</p>}
+        <div className="btn-row">
+          <button className="btn primary" type="submit" data-testid="save-customer">
+            Save
+          </button>
+          <button className="btn" type="button" onClick={props.onClose}>
+            Cancel
+          </button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
+function MessageModal(props: { detail: SubscriptionDetail; onClose: () => void }) {
+  const { settings } = useApp()
+  const [custom, setCustom] = useState('')
+  const d = props.detail
+  if (!d.phone) return null
+  const ctx = {
+    name: d.customer_name,
+    endDate: d.effective_end_date,
+    meal: MEAL_LABEL[d.meal_type] ?? d.meal_type,
+    price: d.price,
+    due: d.due_amount,
+    upi: settings.upiId || '—',
+  }
+  const options = [
+    { label: 'Renewal reminder', message: renderTemplate(settings.renewalTemplate, ctx) },
+    ...(d.due_amount > 0 ? [{ label: 'Dues reminder', message: renderTemplate(settings.duesTemplate, ctx) }] : []),
+    { label: 'Welcome / confirmation', message: renderTemplate(settings.welcomeTemplate, ctx) },
+  ]
+  return (
+    <Modal title={`Message ${d.customer_name}`} onClose={props.onClose}>
+      {options.map((o) => (
+        <div className="row" key={o.label}>
+          <div className="grow">
+            <div className="name">{o.label}</div>
+            <div className="meta">{o.message}</div>
+          </div>
+          <a className="btn wa small" href={waLink(d.phone!, o.message)} target="_blank" rel="noreferrer" data-testid="whatsapp-link">
+            Send
+          </a>
+        </div>
+      ))}
+      <div className="field" style={{ marginTop: 12 }}>
+        <label htmlFor="custom-msg">Custom message</label>
+        <textarea id="custom-msg" value={custom} onChange={(e) => setCustom(e.target.value)} placeholder="Type your own message…" />
+      </div>
+      <div className="btn-row">
+        {custom.trim() ? (
+          <a className="btn wa" href={waLink(d.phone!, custom.trim())} target="_blank" rel="noreferrer">
+            Send custom message
+          </a>
+        ) : (
+          <button className="btn wa" disabled>
+            Send custom message
+          </button>
+        )}
+        <button className="btn" onClick={props.onClose}>
+          Close
+        </button>
+      </div>
+    </Modal>
   )
 }
 
@@ -126,6 +271,7 @@ function SubscriptionCard(props: {
   payments: { id: string; amount: number; paid_on: string; mode: string }[]
   onAddPayment: () => void
   onAddSkip: () => void
+  onMessage: () => void
   onRenew: () => void
   onCancel: () => void
   onRemoveSkip: (skipId: string) => void
@@ -180,7 +326,11 @@ function SubscriptionCard(props: {
         <button className="btn" onClick={props.onRenew}>
           Renew
         </button>
-        <WhatsAppButton detail={d} kind={d.due_amount > 0 ? 'dues' : 'renewal'} />
+        {d.phone && (
+          <button className="btn wa" onClick={props.onMessage} data-testid="open-messages">
+            WhatsApp…
+          </button>
+        )}
         <button className="btn danger" onClick={props.onCancel}>
           Cancel
         </button>

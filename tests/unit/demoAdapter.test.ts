@@ -150,3 +150,37 @@ describe('DemoAdapter payments and subscriptions', () => {
     expect(total).toBeGreaterThan(0)
   })
 })
+
+describe('DemoAdapter v1.1 additions', () => {
+  it('monthly report counts meals served from present marks', async () => {
+    const today = todayIST()
+    const sheet = await adapter.listAttendanceSheet('loc-a', today, 'lunch')
+    await adapter.setAttendance(sheet[0].subscription.id, today, 'lunch', 'present')
+    await adapter.setAttendance(sheet[1].subscription.id, today, 'lunch', 'absent')
+    const report = await adapter.getMonthlyReport(today.slice(0, 7))
+    const locA = report.find((r) => r.locationId === 'loc-a')!
+    expect(locA.mealsServed).toBe(1)
+  })
+
+  it('updateCustomer edits name, phone and location', async () => {
+    const [c] = await adapter.searchCustomers('Sonali')
+    await adapter.updateCustomer(c.id, { name: 'Sonali P.', phone: '9999900000', location_id: 'loc-b' })
+    const { customer } = await adapter.getCustomer(c.id)
+    expect(customer.name).toBe('Sonali P.')
+    expect(customer.phone).toBe('9999900000')
+    expect(customer.location_id).toBe('loc-b')
+  })
+
+  it('upsertLocation renames an existing location', async () => {
+    await adapter.upsertLocation({ id: 'loc-a', name: 'Renamed Branch' })
+    const locations = await adapter.listLocations()
+    expect(locations.map((l) => l.name)).toContain('Renamed Branch')
+  })
+
+  it('settings include an editable welcome template', async () => {
+    const s = await adapter.getSettings()
+    expect(s.welcomeTemplate.length).toBeGreaterThan(0)
+    await adapter.saveSettings({ ...s, welcomeTemplate: 'Hello {name}!' })
+    expect((await adapter.getSettings()).welcomeTemplate).toBe('Hello {name}!')
+  })
+})

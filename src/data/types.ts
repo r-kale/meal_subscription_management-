@@ -98,11 +98,13 @@ export interface ReportRow {
   revenue: number
   newSubscriptions: number
   activeAtMonthEnd: number
+  mealsServed: number
 }
 
 export interface AppSettings {
   renewalTemplate: string
   duesTemplate: string
+  welcomeTemplate: string
   upiId: string
   expiryWindowDays: number
 }

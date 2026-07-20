@@ -17,6 +17,9 @@ export const DEFAULT_RENEWAL_TEMPLATE =
 export const DEFAULT_DUES_TEMPLATE =
   'Namaste {name} ji! Aapke tiffin ke {due} baaki hain. UPI: {upi}. Dhanyavaad!'
 
+export const DEFAULT_WELCOME_TEMPLATE =
+  'Namaste {name} ji! Aapka {meal} tiffin subscription shuru ho gaya hai — {end_date} tak valid. Dhanyavaad!'
+
 export function renderTemplate(template: string, ctx: TemplateContext): string {
   return template
     .replaceAll('{name}', ctx.name)

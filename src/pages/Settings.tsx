@@ -1,15 +1,17 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Modal } from '../components/ui'
-import type { MealType, Plan } from '../data/types'
+import type { Location, MealType, Plan } from '../data/types'
 import { DemoAdapter } from '../data/demoAdapter'
 import { MEAL_LABEL } from '../lib/domain'
 import { inr } from '../lib/money'
 import { useApp } from '../state/AppContext'
 
 export function Settings() {
-  const { adapter, session, signOut, settings, reloadSettings, locations, reloadLocations } = useApp()
+  const { adapter, session, signOut, settings, reloadSettings, reloadLocations } = useApp()
+  const [locations, setLocations] = useState<Location[]>([])
   const [plans, setPlans] = useState<Plan[]>([])
   const [editingPlan, setEditingPlan] = useState<Partial<Plan> | null>(null)
+  const [editingLocation, setEditingLocation] = useState<Location | null>(null)
   const [newLocation, setNewLocation] = useState('')
   const [form, setForm] = useState(settings)
   const [saved, setSaved] = useState(false)
@@ -17,7 +19,13 @@ export function Settings() {
   useEffect(() => setForm(settings), [settings])
   useEffect(() => {
     adapter.listPlans(true).then(setPlans)
+    adapter.listLocations(true).then(setLocations)
   }, [adapter])
+
+  async function refreshLocations() {
+    setLocations(await adapter.listLocations(true))
+    await reloadLocations()
+  }
 
   async function saveTemplates(e: FormEvent) {
     e.preventDefault()
@@ -32,7 +40,7 @@ export function Settings() {
     if (!newLocation.trim()) return
     await adapter.upsertLocation({ name: newLocation.trim() })
     setNewLocation('')
-    await reloadLocations()
+    await refreshLocations()
   }
 
   async function savePlan(e: FormEvent) {
@@ -57,8 +65,9 @@ export function Settings() {
       <div className="card">
         <h3>Locations</h3>
         {locations.map((l) => (
-          <div className="row" key={l.id}>
+          <div className="row tappable" key={l.id} onClick={() => setEditingLocation(l)} data-testid="location-row">
             <div className="grow name">{l.name}</div>
+            <span className="muted">rename ›</span>
           </div>
         ))}
         <form onSubmit={addLocation} className="btn-row" style={{ marginTop: 8 }}>
@@ -119,6 +128,10 @@ export function Settings() {
           <label htmlFor="set-dues">Dues message ({'{name} {due} {upi}'})</label>
           <textarea id="set-dues" value={form.duesTemplate} onChange={(e) => setForm({ ...form, duesTemplate: e.target.value })} />
         </div>
+        <div className="field">
+          <label htmlFor="set-welcome">Welcome message ({'{name} {meal} {end_date}'})</label>
+          <textarea id="set-welcome" value={form.welcomeTemplate} onChange={(e) => setForm({ ...form, welcomeTemplate: e.target.value })} />
+        </div>
         <button className="btn primary" type="submit">
           {saved ? 'Saved ✓' : 'Save settings'}
         </button>
@@ -144,6 +157,48 @@ export function Settings() {
           )}
         </div>
       </div>
+
+      {editingLocation && (
+        <Modal title="Rename location" onClose={() => setEditingLocation(null)}>
+          <form
+            onSubmit={async (e) => {
+              e.preventDefault()
+              if (!editingLocation.name.trim()) return
+              await adapter.upsertLocation({ id: editingLocation.id, name: editingLocation.name.trim(), is_active: editingLocation.is_active })
+              setEditingLocation(null)
+              await refreshLocations()
+            }}
+          >
+            <div className="field">
+              <label htmlFor="loc-name">Location name</label>
+              <input
+                id="loc-name"
+                value={editingLocation.name}
+                onChange={(e) => setEditingLocation({ ...editingLocation, name: e.target.value })}
+                data-testid="location-name-input"
+              />
+            </div>
+            <div className="field">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={editingLocation.is_active}
+                  onChange={(e) => setEditingLocation({ ...editingLocation, is_active: e.target.checked })}
+                />{' '}
+                Active (inactive locations are hidden from pickers)
+              </label>
+            </div>
+            <div className="btn-row">
+              <button className="btn primary" type="submit" data-testid="save-location">
+                Save
+              </button>
+              <button className="btn" type="button" onClick={() => setEditingLocation(null)}>
+                Cancel
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
 
       {editingPlan && (
         <Modal title={editingPlan.id ? 'Edit plan' : 'New plan'} onClose={() => setEditingPlan(null)}>

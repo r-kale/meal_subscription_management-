@@ -188,5 +188,6 @@ insert into plans (name, meal_type, duration_days, price) values
 insert into app_settings (key, value) values
   ('renewal_template', 'Namaste {name} ji! Aapka {meal} tiffin {end_date} ko khatam ho raha hai. Renew karne ke liye {price} bhejein — UPI: {upi}. Dhanyavaad!'),
   ('dues_template', 'Namaste {name} ji! Aapke tiffin ke {due} baaki hain. UPI: {upi}. Dhanyavaad!'),
+  ('welcome_template', 'Namaste {name} ji! Aapka {meal} tiffin subscription shuru ho gaya hai — {end_date} tak valid. Dhanyavaad!'),
   ('upi_id', ''),
   ('expiry_window_days', '5');
